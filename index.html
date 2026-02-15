@@ -1,0 +1,1469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MCP Server POC — IT Incident Intelligence</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #080c14;
+    --surface: #0d1320;
+    --panel: #111827;
+    --border: #1e2d40;
+    --border-glow: #1e4d7a;
+    --accent: #00d4ff;
+    --accent2: #7c3aed;
+    --accent3: #10b981;
+    --warn: #f59e0b;
+    --danger: #ef4444;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --dim: #1e293b;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Background grid */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,212,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,212,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .app { position: relative; z-index: 1; }
+
+  /* ── Header ── */
+  header {
+    background: linear-gradient(90deg, var(--surface), #0d1a2e);
+    border-bottom: 1px solid var(--border-glow);
+    padding: 14px 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 2px 24px rgba(0,212,255,0.08);
+  }
+
+  .logo-group { display: flex; align-items: center; gap: 14px; }
+
+  .logo-icon {
+    width: 38px; height: 38px;
+    background: linear-gradient(135deg, var(--accent2), var(--accent));
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+    box-shadow: 0 0 16px rgba(0,212,255,0.3);
+  }
+
+  .logo-text { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 16px; }
+  .logo-text span { color: var(--accent); }
+  .logo-sub { font-size: 10px; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; margin-top: 1px; }
+
+  .header-right { display: flex; align-items: center; gap: 16px; }
+
+  .status-dot {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 11px; color: var(--accent3);
+  }
+  .status-dot::before {
+    content: '';
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent3);
+    box-shadow: 0 0 8px var(--accent3);
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .version-badge {
+    background: var(--dim);
+    border: 1px solid var(--border);
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  /* ── Layout ── */
+  .main-layout {
+    display: grid;
+    grid-template-columns: 280px 1fr 340px;
+    grid-template-rows: auto 1fr;
+    height: calc(100vh - 67px);
+  }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 16px 0;
+  }
+
+  .sidebar-section { margin-bottom: 4px; }
+
+  .sidebar-label {
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    padding: 8px 16px 6px;
+  }
+
+  .tool-item {
+    padding: 10px 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    transition: all 0.15s;
+    border-left: 2px solid transparent;
+    position: relative;
+  }
+
+  .tool-item:hover { background: rgba(0,212,255,0.04); border-left-color: var(--border-glow); }
+  .tool-item.active { background: rgba(0,212,255,0.07); border-left-color: var(--accent); }
+
+  .tool-icon {
+    font-size: 16px;
+    width: 28px; height: 28px;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--panel);
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .tool-info { flex: 1; min-width: 0; }
+  .tool-name { font-size: 12px; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tool-desc { font-size: 10px; color: var(--muted); margin-top: 2px; line-height: 1.4; }
+
+  .method-tag {
+    font-size: 9px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-weight: 700;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .method-tool { background: rgba(0,212,255,0.15); color: var(--accent); border: 1px solid rgba(0,212,255,0.3); }
+  .method-res { background: rgba(16,185,129,0.15); color: var(--accent3); border: 1px solid rgba(16,185,129,0.3); }
+  .method-prompt { background: rgba(124,58,237,0.15); color: #a78bfa; border: 1px solid rgba(124,58,237,0.3); }
+
+  /* ── Center Panel ── */
+  .center-panel {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .panel-header {
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .panel-title { font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 700; color: var(--accent); }
+  .panel-subtitle { font-size: 10px; color: var(--muted); margin-top: 2px; }
+
+  .tab-row { display: flex; gap: 2px; }
+  .tab-btn {
+    padding: 6px 14px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    border-radius: 6px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 11px;
+    transition: all 0.15s;
+  }
+  .tab-btn.active { background: var(--dim); color: var(--accent); border-color: var(--border-glow); }
+  .tab-btn:hover:not(.active) { color: var(--text); background: rgba(255,255,255,0.03); }
+
+  /* ── Request Builder ── */
+  .request-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .flow-diagram {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .flow-node {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    min-width: 80px;
+  }
+
+  .flow-node-icon {
+    width: 44px; height: 44px;
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+    border: 1px solid;
+  }
+
+  .fn-blue { background: rgba(0,212,255,0.1); border-color: rgba(0,212,255,0.3); box-shadow: 0 0 12px rgba(0,212,255,0.1); }
+  .fn-purple { background: rgba(124,58,237,0.1); border-color: rgba(124,58,237,0.3); box-shadow: 0 0 12px rgba(124,58,237,0.1); }
+  .fn-green { background: rgba(16,185,129,0.1); border-color: rgba(16,185,129,0.3); box-shadow: 0 0 12px rgba(16,185,129,0.1); }
+  .fn-orange { background: rgba(245,158,11,0.1); border-color: rgba(245,158,11,0.3); box-shadow: 0 0 12px rgba(245,158,11,0.1); }
+
+  .flow-node-label { font-size: 10px; color: var(--muted); text-align: center; }
+
+  .flow-arrow { color: var(--border-glow); font-size: 18px; flex-shrink: 0; }
+
+  /* Tool Selector */
+  .tool-selector {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  .ts-header {
+    padding: 12px 16px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .ts-body { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+
+  .input-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  .form-group { display: flex; flex-direction: column; gap: 5px; }
+  .form-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+
+  .form-input, .form-select, .form-textarea {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    transition: border-color 0.15s;
+    outline: none;
+  }
+  .form-input:focus, .form-select:focus, .form-textarea:focus { border-color: var(--border-glow); box-shadow: 0 0 0 2px rgba(0,212,255,0.07); }
+  .form-textarea { resize: vertical; min-height: 70px; }
+  .form-select option { background: var(--bg); }
+
+  .call-btn {
+    background: linear-gradient(135deg, var(--accent2), #5b21b6);
+    border: none;
+    color: white;
+    padding: 11px 24px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s;
+    box-shadow: 0 4px 16px rgba(124,58,237,0.3);
+    align-self: flex-start;
+  }
+  .call-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(124,58,237,0.4); }
+  .call-btn:active { transform: none; }
+  .call-btn.loading { opacity: 0.7; cursor: wait; }
+
+  /* ── Output/Response area ── */
+  .response-area {
+    border-top: 1px solid var(--border);
+    background: var(--bg);
+    max-height: 320px;
+    overflow-y: auto;
+  }
+
+  .res-header {
+    padding: 10px 16px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .res-title { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+
+  .res-status {
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-weight: 700;
+  }
+  .status-ok { background: rgba(16,185,129,0.15); color: var(--accent3); border: 1px solid rgba(16,185,129,0.3); }
+  .status-err { background: rgba(239,68,68,0.15); color: var(--danger); border: 1px solid rgba(239,68,68,0.3); }
+  .status-wait { background: rgba(245,158,11,0.15); color: var(--warn); border: 1px solid rgba(245,158,11,0.3); }
+
+  .json-output {
+    padding: 16px;
+    font-size: 11.5px;
+    line-height: 1.7;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .jk { color: #7dd3fc; }   /* key */
+  .js { color: #86efac; }   /* string */
+  .jn { color: #fb923c; }   /* number */
+  .jb { color: #c084fc; }   /* bool */
+  .jm { color: var(--muted); } /* misc */
+
+  /* ── Right Panel ── */
+  .right-panel {
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .rp-section {
+    border-bottom: 1px solid var(--border);
+    padding: 16px;
+  }
+
+  .rp-title {
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* Activity Feed */
+  .activity-item {
+    display: flex;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(30,45,64,0.5);
+    animation: fadeIn 0.4s ease;
+  }
+  .activity-item:last-child { border-bottom: none; }
+
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+  .ai-time { font-size: 9px; color: var(--muted); white-space: nowrap; padding-top: 2px; }
+  .ai-body { flex: 1; }
+  .ai-method { font-size: 10px; font-weight: 700; }
+  .ai-label { font-size: 11px; color: var(--text); margin-top: 1px; }
+  .ai-meta { font-size: 10px; color: var(--muted); margin-top: 2px; }
+
+  /* Schema viewer */
+  .schema-block {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px;
+    font-size: 11px;
+    line-height: 1.7;
+    white-space: pre-wrap;
+  }
+
+  /* Metrics */
+  .metrics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .metric-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    text-align: center;
+  }
+  .metric-val { font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 800; }
+  .metric-lbl { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-top: 2px; }
+  .mv-blue { color: var(--accent); }
+  .mv-green { color: var(--accent3); }
+  .mv-purple { color: #a78bfa; }
+  .mv-orange { color: var(--warn); }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--dim); border-radius: 2px; }
+
+  /* Protocol badge */
+  .protocol-info {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px;
+    background: linear-gradient(90deg, rgba(0,212,255,0.05), transparent);
+    border: 1px solid rgba(0,212,255,0.15);
+    border-radius: 6px;
+    font-size: 10px;
+    color: var(--muted);
+  }
+  .protocol-info strong { color: var(--accent); }
+
+  /* Typing indicator */
+  .typing { display: flex; gap: 3px; align-items: center; padding: 8px 0; }
+  .typing span {
+    width: 5px; height: 5px; border-radius: 50%;
+    background: var(--accent);
+    animation: bounce 1.2s infinite;
+    opacity: 0.7;
+  }
+  .typing span:nth-child(2) { animation-delay: 0.2s; }
+  .typing span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes bounce { 0%,80%,100% { transform: none; } 40% { transform: translateY(-5px); } }
+
+  .hidden { display: none !important; }
+  .mb-0 { margin-bottom: 0 !important; }
+
+  /* Explainer bar */
+  .explainer {
+    background: linear-gradient(90deg, rgba(124,58,237,0.1), rgba(0,212,255,0.05));
+    border-bottom: 1px solid var(--border);
+    padding: 10px 20px;
+    font-size: 11px;
+    color: var(--muted);
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .explainer strong { color: var(--text); }
+  .explainer a { color: var(--accent); text-decoration: none; }
+
+  /* Tag chips */
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .chip-blue { background: rgba(0,212,255,0.1); color: var(--accent); border: 1px solid rgba(0,212,255,0.2); }
+  .chip-green { background: rgba(16,185,129,0.1); color: var(--accent3); border: 1px solid rgba(16,185,129,0.2); }
+  .chip-red { background: rgba(239,68,68,0.1); color: var(--danger); border: 1px solid rgba(239,68,68,0.2); }
+  .chip-orange { background: rgba(245,158,11,0.1); color: var(--warn); border: 1px solid rgba(245,158,11,0.2); }
+  .chip-purple { background: rgba(124,58,237,0.1); color: #a78bfa; border: 1px solid rgba(124,58,237,0.2); }
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- HEADER -->
+<header>
+  <div class="logo-group">
+    <div class="logo-icon">⚡</div>
+    <div>
+      <div class="logo-text">Incident<span>MCP</span></div>
+      <div class="logo-sub">Model Context Protocol Server · v1.0.0</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="status-dot">SERVER RUNNING</div>
+    <div class="version-badge">MCP Spec 2024-11-05</div>
+    <div class="version-badge">Built by Baliram Kadam</div>
+  </div>
+</header>
+
+<!-- MAIN -->
+<div class="main-layout">
+
+  <!-- Explainer bar spans all columns -->
+  <div class="explainer">
+    <span>🔌</span>
+    <strong>What is this?</strong>
+    An MCP (Model Context Protocol) Server exposes tools, resources & prompts that any AI agent (Claude, GPT, etc.) can call using a standardized protocol —
+    like a USB interface between LLMs and real-world systems. This POC wraps real IT incident workflows.
+    <span class="chip chip-blue">Tools: 4</span>
+    <span class="chip chip-green">Resources: 3</span>
+    <span class="chip chip-purple">Prompts: 2</span>
+    <span class="chip chip-orange">Transport: stdio / HTTP+SSE</span>
+  </div>
+
+  <!-- SIDEBAR: Tool list -->
+  <aside class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-label">🔧 Tools</div>
+      <div class="tool-item active" onclick="selectTool('triage')" id="t-triage">
+        <div class="tool-icon">🚨</div>
+        <div class="tool-info">
+          <div class="tool-name">triage_incident</div>
+          <div class="tool-desc">Auto-classify & prioritize P1/P2 incidents using LLM</div>
+          <span class="method-tag method-tool">TOOL</span>
+        </div>
+      </div>
+      <div class="tool-item" onclick="selectTool('search')" id="t-search">
+        <div class="tool-icon">🔍</div>
+        <div class="tool-info">
+          <div class="tool-name">search_knowledge</div>
+          <div class="tool-desc">RAG-powered search across KB, runbooks, past incidents</div>
+          <span class="method-tag method-tool">TOOL</span>
+        </div>
+      </div>
+      <div class="tool-item" onclick="selectTool('enrich')" id="t-enrich">
+        <div class="tool-icon">🧩</div>
+        <div class="tool-info">
+          <div class="tool-name">enrich_ticket</div>
+          <div class="tool-desc">Auto-fill ServiceNow fields with AI-generated data</div>
+          <span class="method-tag method-tool">TOOL</span>
+        </div>
+      </div>
+      <div class="tool-item" onclick="selectTool('rca')" id="t-rca">
+        <div class="tool-icon">🔬</div>
+        <div class="tool-info">
+          <div class="tool-name">generate_rca</div>
+          <div class="tool-desc">Root Cause Analysis draft from incident timeline</div>
+          <span class="method-tag method-tool">TOOL</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">📚 Resources</div>
+      <div class="tool-item" onclick="selectTool('res_kb')" id="t-res_kb">
+        <div class="tool-icon">📖</div>
+        <div class="tool-info">
+          <div class="tool-name">incident://knowledge-base</div>
+          <div class="tool-desc">Live KB articles & runbooks as context</div>
+          <span class="method-tag method-res">RESOURCE</span>
+        </div>
+      </div>
+      <div class="tool-item" onclick="selectTool('res_metrics')" id="t-res_metrics">
+        <div class="tool-icon">📊</div>
+        <div class="tool-info">
+          <div class="tool-name">incident://metrics</div>
+          <div class="tool-desc">Real-time MTTR, ticket volume, SLA breach stats</div>
+          <span class="method-tag method-res">RESOURCE</span>
+        </div>
+      </div>
+      <div class="tool-item" onclick="selectTool('res_hist')" id="t-res_hist">
+        <div class="tool-icon">🗂️</div>
+        <div class="tool-info">
+          <div class="tool-name">incident://history</div>
+          <div class="tool-desc">Past incident patterns for similarity matching</div>
+          <span class="method-tag method-res">RESOURCE</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">💬 Prompts</div>
+      <div class="tool-item" onclick="selectTool('p_runbook')" id="t-p_runbook">
+        <div class="tool-icon">📝</div>
+        <div class="tool-info">
+          <div class="tool-name">generate_runbook</div>
+          <div class="tool-desc">Structured runbook creation prompt template</div>
+          <span class="method-tag method-prompt">PROMPT</span>
+        </div>
+      </div>
+      <div class="tool-item" onclick="selectTool('p_summary')" id="t-p_summary">
+        <div class="tool-icon">📋</div>
+        <div class="tool-info">
+          <div class="tool-name">incident_summary</div>
+          <div class="tool-desc">Exec-ready incident summary with business impact</div>
+          <span class="method-tag method-prompt">PROMPT</span>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- CENTER PANEL -->
+  <main class="center-panel">
+    <div class="panel-header">
+      <div>
+        <div class="panel-title" id="active-tool-name">triage_incident</div>
+        <div class="panel-subtitle" id="active-tool-desc">Auto-classify & prioritize P1/P2 incidents using LLM reasoning + historical patterns</div>
+      </div>
+      <div class="tab-row">
+        <button class="tab-btn active" onclick="switchTab('request')">Request</button>
+        <button class="tab-btn" onclick="switchTab('schema')">Schema</button>
+        <button class="tab-btn" onclick="switchTab('code')">Code</button>
+      </div>
+    </div>
+
+    <div class="request-area" id="tab-request">
+
+      <!-- Flow diagram -->
+      <div class="flow-diagram">
+        <div class="flow-node">
+          <div class="flow-node-icon fn-blue">🤖</div>
+          <div class="flow-node-label">LLM<br/>(Claude/GPT)</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-node">
+          <div class="flow-node-icon fn-purple">⚡</div>
+          <div class="flow-node-label">MCP<br/>Protocol</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-node">
+          <div class="flow-node-icon fn-orange">🚨</div>
+          <div class="flow-node-label">Incident<br/>Server</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-node">
+          <div class="flow-node-icon fn-green">📊</div>
+          <div class="flow-node-label">ServiceNow<br/>/ JIRA</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-node">
+          <div class="flow-node-icon fn-blue">✅</div>
+          <div class="flow-node-label">AI<br/>Response</div>
+        </div>
+      </div>
+
+      <!-- Tool Form -->
+      <div class="tool-selector" id="form-container">
+        <div class="ts-header">📨 MCP Tool Call Parameters</div>
+        <div class="ts-body" id="form-body">
+          <!-- Injected by JS -->
+        </div>
+      </div>
+
+      <!-- Protocol Info -->
+      <div class="protocol-info">
+        <span>🔌</span>
+        <span>Transport: <strong>stdio</strong> | Method: <strong>tools/call</strong> | Spec: <strong>MCP 2024-11-05</strong> | Auth: <strong>Bearer Token</strong></span>
+      </div>
+
+    </div>
+
+    <!-- SCHEMA TAB -->
+    <div class="request-area hidden" id="tab-schema">
+      <div class="tool-selector">
+        <div class="ts-header">📐 JSON Schema — MCP Tool Definition</div>
+        <div class="ts-body">
+          <div class="schema-block" id="schema-display"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CODE TAB -->
+    <div class="request-area hidden" id="tab-code">
+      <div class="tool-selector">
+        <div class="ts-header">💻 Python MCP Server Code (server.py)</div>
+        <div class="ts-body">
+          <div class="schema-block" id="code-display"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Response Area -->
+    <div class="response-area">
+      <div class="res-header">
+        <span class="res-title">⬇ MCP Server Response</span>
+        <span class="res-status status-wait" id="res-status">IDLE</span>
+      </div>
+      <div class="json-output" id="res-output">
+        <span class="jm">// Click "Execute MCP Call" to send a tool request to the server...</span>
+      </div>
+    </div>
+  </main>
+
+  <!-- RIGHT PANEL -->
+  <aside class="right-panel">
+
+    <!-- Metrics -->
+    <div class="rp-section">
+      <div class="rp-title">📈 Live Server Metrics</div>
+      <div class="metrics-grid">
+        <div class="metric-card">
+          <div class="metric-val mv-blue" id="m-calls">0</div>
+          <div class="metric-lbl">Tool Calls</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-val mv-green" id="m-mttr">42%</div>
+          <div class="metric-lbl">MTTR Reduction</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-val mv-purple" id="m-tokens">0</div>
+          <div class="metric-lbl">Tokens Used</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-val mv-orange" id="m-lat">—</div>
+          <div class="metric-lbl">Latency (ms)</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Activity Feed -->
+    <div class="rp-section" style="flex:1;">
+      <div class="rp-title">🕐 Activity Log</div>
+      <div id="activity-feed">
+        <div class="activity-item">
+          <div class="ai-time">init</div>
+          <div class="ai-body">
+            <div class="ai-method" style="color:var(--accent3)">SERVER START</div>
+            <div class="ai-label">MCP server initialized</div>
+            <div class="ai-meta">4 tools · 3 resources · 2 prompts registered</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Architecture Note -->
+    <div class="rp-section">
+      <div class="rp-title">🏗️ Architecture</div>
+      <div style="font-size:10px; color:var(--muted); line-height:1.8;">
+        <div>→ <span style="color:var(--text)">FastAPI</span> HTTP/SSE transport</div>
+        <div>→ <span style="color:var(--text)">Azure OpenAI</span> + RAG backend</div>
+        <div>→ <span style="color:var(--text)">Pinecone</span> vector search</div>
+        <div>→ <span style="color:var(--text)">ServiceNow</span> API integration</div>
+        <div>→ <span style="color:var(--text)">PostgreSQL</span> incident history</div>
+        <div>→ <span style="color:var(--text)">Docker</span> containerized</div>
+      </div>
+    </div>
+
+  </aside>
+</div>
+</div>
+
+<script>
+// ── State ──
+let activeTool = 'triage';
+let callCount = 0;
+let totalTokens = 0;
+
+// ── Tool Definitions ──
+const TOOLS = {
+  triage: {
+    name: 'triage_incident',
+    type: 'TOOL',
+    desc: 'Auto-classify & prioritize P1/P2 incidents using LLM reasoning + historical patterns',
+    fields: [
+      { id: 'incident_id', label: 'Incident ID', type: 'text', placeholder: 'INC0045821', default: 'INC0045821' },
+      { id: 'title', label: 'Incident Title', type: 'text', placeholder: 'API Gateway 502 errors', default: 'SAP API Gateway returning 502 on all /orders endpoints' },
+      { id: 'description', label: 'Description', type: 'textarea', placeholder: 'Describe the incident...', default: 'Since 14:32 IST all POST requests to /api/v2/orders are failing with 502. Affects order management module. 3 business users reporting. Azure App Gateway logs show upstream timeout.' },
+      { id: 'severity', label: 'Reported Severity', type: 'select', options: ['P1 - Critical', 'P2 - High', 'P3 - Medium', 'P4 - Low'], default: 'P2 - High' },
+      { id: 'source_system', label: 'Source System', type: 'select', options: ['ServiceNow', 'JIRA', 'PagerDuty', 'Manual'], default: 'ServiceNow' },
+    ],
+    schema: `{
+  "name": "triage_incident",
+  "description": "Auto-classify & prioritize incidents using LLM + historical pattern matching",
+  "inputSchema": {
+    "type": "object",
+    "required": ["incident_id", "title", "description"],
+    "properties": {
+      "incident_id": {
+        "type": "string",
+        "description": "ServiceNow/JIRA ticket ID"
+      },
+      "title": {
+        "type": "string",
+        "description": "Short incident title"
+      },
+      "description": {
+        "type": "string",
+        "description": "Full incident description"
+      },
+      "severity": {
+        "type": "string",
+        "enum": ["P1 - Critical","P2 - High","P3 - Medium","P4 - Low"]
+      },
+      "source_system": {
+        "type": "string",
+        "enum": ["ServiceNow","JIRA","PagerDuty","Manual"]
+      }
+    }
+  }
+}`,
+    code: `# MCP Server — IT Incident Intelligence
+# server.py (FastAPI + MCP Python SDK)
+
+from mcp.server.fastmcp import FastMCP
+from mcp.types import TextContent
+from openai import AzureOpenAI
+import pinecone, json
+
+mcp = FastMCP("IncidentMCPServer")
+az_client = AzureOpenAI(...)  # Azure OpenAI
+
+@mcp.tool()
+async def triage_incident(
+    incident_id: str,
+    title: str,
+    description: str,
+    severity: str = "P2 - High",
+    source_system: str = "ServiceNow"
+) -> list[TextContent]:
+    """
+    Auto-classify & prioritize P1/P2 incidents
+    using LLM reasoning + historical pattern matching.
+    """
+    # Step 1: Vector search — find similar past incidents
+    similar = pinecone_search(description, top_k=3)
+    
+    # Step 2: LLM triage reasoning
+    prompt = f"""
+    Triage this IT incident:
+    Title: {title}
+    Description: {description}
+    Similar past incidents: {similar}
+    
+    Return JSON with:
+    - priority (P1/P2/P3)
+    - category (Network/Database/App/Infra)
+    - assignment_group
+    - confidence_score
+    - reasoning
+    - recommended_actions (list)
+    """
+    
+    response = az_client.chat.completions.create(
+        model="gpt-4o",
+        messages=[{"role":"user","content":prompt}],
+        response_format={"type":"json_object"}
+    )
+    
+    result = json.loads(response.choices[0].message.content)
+    result["incident_id"] = incident_id
+    result["tokens_used"] = response.usage.total_tokens
+    
+    return [TextContent(type="text", text=json.dumps(result))]
+
+if __name__ == "__main__":
+    mcp.run(transport="stdio")  # or "sse" for HTTP`,
+    mockResponse: (data) => ({
+      jsonrpc: "2.0",
+      id: 1,
+      result: {
+        content: [{
+          type: "text",
+          text: {
+            incident_id: data.incident_id || "INC0045821",
+            priority: "P1 - Critical",
+            category: "Infrastructure / API Gateway",
+            assignment_group: "Azure-Platform-L2",
+            confidence_score: 0.94,
+            escalated_from: data.severity || "P2 - High",
+            reasoning: "502 errors on all endpoints indicate upstream timeout at Azure App Gateway level. Pattern matches INC0041209 (2024-08-12) — resolved by restarting Azure APIM cache. Business impact: 3 users blocked, order intake halted. Escalating to P1.",
+            recommended_actions: [
+              "Check Azure App Gateway health probes — likely upstream timeout",
+              "Restart APIM developer portal cache (matched pattern INC0041209)",
+              "Notify SAP basis team — verify SAP NetWeaver RFC connectivity",
+              "Enable circuit breaker on /orders route temporarily"
+            ],
+            similar_incidents: ["INC0041209 (92% match)", "INC0039874 (78% match)"],
+            mttr_estimate_minutes: 35,
+            tokens_used: 847,
+            processing_time_ms: 312
+          }
+        }]
+      }
+    })
+  },
+  search: {
+    name: 'search_knowledge',
+    type: 'TOOL',
+    desc: 'RAG-powered semantic search across KB articles, runbooks, and past incidents',
+    fields: [
+      { id: 'query', label: 'Search Query', type: 'textarea', placeholder: 'Azure API Gateway 502 fix...', default: 'How to fix Azure API Management Gateway 502 Bad Gateway errors' },
+      { id: 'sources', label: 'Sources', type: 'select', options: ['All Sources', 'Knowledge Base Only', 'Past Incidents Only', 'Runbooks Only'], default: 'All Sources' },
+      { id: 'top_k', label: 'Top Results', type: 'text', placeholder: '5', default: '5' },
+      { id: 'min_score', label: 'Min Similarity Score', type: 'text', placeholder: '0.75', default: '0.75' },
+    ],
+    schema: `{
+  "name": "search_knowledge",
+  "description": "RAG-powered semantic search across KB, runbooks & incidents",
+  "inputSchema": {
+    "type": "object",
+    "required": ["query"],
+    "properties": {
+      "query": {
+        "type": "string",
+        "description": "Natural language search query"
+      },
+      "sources": {
+        "type": "string",
+        "enum": ["All Sources","Knowledge Base Only","Past Incidents Only","Runbooks Only"]
+      },
+      "top_k": {
+        "type": "integer",
+        "description": "Number of results to return",
+        "default": 5
+      },
+      "min_score": {
+        "type": "number",
+        "description": "Minimum cosine similarity (0-1)",
+        "default": 0.75
+      }
+    }
+  }
+}`,
+    code: `@mcp.tool()
+async def search_knowledge(
+    query: str,
+    sources: str = "All Sources",
+    top_k: int = 5,
+    min_score: float = 0.75
+) -> list[TextContent]:
+    """RAG-powered knowledge base search via Pinecone."""
+    
+    # Embed query using Azure OpenAI
+    embedding = az_client.embeddings.create(
+        model="text-embedding-ada-002",
+        input=query
+    ).data[0].embedding
+    
+    # Pinecone vector search
+    results = pinecone_index.query(
+        vector=embedding,
+        top_k=top_k,
+        filter=build_filter(sources),
+        include_metadata=True
+    )
+    
+    hits = [
+        {
+            "id": m.id,
+            "score": round(m.score, 4),
+            "title": m.metadata["title"],
+            "source_type": m.metadata["type"],
+            "url": m.metadata.get("url", ""),
+            "excerpt": m.metadata["content"][:200]
+        }
+        for m in results.matches
+        if m.score >= min_score
+    ]
+    
+    return [TextContent(type="text", text=json.dumps({
+        "query": query,
+        "results": hits,
+        "total_found": len(hits)
+    }))]`,
+    mockResponse: (data) => ({
+      jsonrpc: "2.0",
+      id: 2,
+      result: {
+        content: [{
+          type: "text",
+          text: {
+            query: data.query || "Azure API Gateway 502",
+            total_found: 4,
+            results: [
+              { id: "KB0012341", score: 0.96, title: "Azure APIM Gateway — 502/504 Troubleshooting Guide", source_type: "runbook", excerpt: "502 Bad Gateway from APIM usually indicates backend timeout. Steps: 1) Check backend health 2) Verify timeout policies 3) Restart APIM cache..." },
+              { id: "INC0041209", score: 0.92, title: "APIM 502 on /orders — SAP RFC timeout", source_type: "past_incident", excerpt: "Root cause: SAP RFC connection pool exhausted after batch job. Fix: Increase connection pool limit + restart APIM developer cache. Resolution time: 28 min." },
+              { id: "KB0009873", score: 0.81, title: "Azure App Gateway Health Probe Configuration", source_type: "knowledge_base", excerpt: "Ensure health probe path returns 200 OK. Common mistake: probe hitting auth-protected URL returning 401 → treated as unhealthy backend." },
+              { id: "RB0002210", score: 0.77, title: "API Incident P1 Runbook — Escalation Steps", source_type: "runbook", excerpt: "P1 API incidents: 1) Alert Azure-Platform-L2 on-call 2) Enable maintenance page 3) Check App Insights live metrics 4) Engage SAP basis if RFC involved." }
+            ]
+          }
+        }]
+      }
+    })
+  },
+  enrich: {
+    name: 'enrich_ticket',
+    type: 'TOOL',
+    desc: 'Auto-fill ServiceNow/JIRA ticket fields using AI-generated structured data',
+    fields: [
+      { id: 'ticket_id', label: 'Ticket ID', type: 'text', placeholder: 'INC0045821', default: 'INC0045821' },
+      { id: 'raw_description', label: 'Raw Description (from reporter)', type: 'textarea', default: 'orders API not working since 2pm. getting error 502. urgent!' },
+      { id: 'target_system', label: 'Target System', type: 'select', options: ['ServiceNow', 'JIRA', 'Both'], default: 'ServiceNow' },
+    ],
+    schema: `{
+  "name": "enrich_ticket",
+  "description": "Auto-fill ticket fields using AI structured extraction",
+  "inputSchema": {
+    "type": "object",
+    "required": ["ticket_id","raw_description"],
+    "properties": {
+      "ticket_id": { "type": "string" },
+      "raw_description": {
+        "type": "string",
+        "description": "Raw unstructured text from the reporter"
+      },
+      "target_system": {
+        "type": "string",
+        "enum": ["ServiceNow","JIRA","Both"]
+      }
+    }
+  }
+}`,
+    code: `@mcp.tool()
+async def enrich_ticket(
+    ticket_id: str,
+    raw_description: str,
+    target_system: str = "ServiceNow"
+) -> list[TextContent]:
+    """Extract structured fields from raw incident description."""
+    
+    response = az_client.chat.completions.create(
+        model="gpt-4o",
+        messages=[{
+            "role": "user",
+            "content": f"""Extract ServiceNow fields from:
+            "{raw_description}"
+            
+            Return JSON: short_description, category, subcategory,
+            urgency (1-4), impact (1-4), business_service,
+            affected_users_estimate, time_of_occurrence"""
+        }],
+        response_format={"type": "json_object"}
+    )
+    
+    fields = json.loads(response.choices[0].message.content)
+    
+    # Push to ServiceNow via REST API
+    if target_system in ["ServiceNow","Both"]:
+        snow_client.update_incident(ticket_id, fields)
+    
+    return [TextContent(type="text", text=json.dumps({
+        "ticket_id": ticket_id,
+        "enriched_fields": fields,
+        "pushed_to": target_system
+    }))]`,
+    mockResponse: (data) => ({
+      jsonrpc: "2.0",
+      id: 3,
+      result: {
+        content: [{
+          type: "text",
+          text: {
+            ticket_id: data.ticket_id || "INC0045821",
+            pushed_to: data.target_system || "ServiceNow",
+            enriched_fields: {
+              short_description: "SAP APIM /orders endpoint returning HTTP 502 since 14:32 IST",
+              category: "Application",
+              subcategory: "API / Integration",
+              business_service: "Order Management - SAP S/4HANA",
+              urgency: 1,
+              impact: 2,
+              affected_users_estimate: 3,
+              time_of_occurrence: "2025-06-14T14:32:00+05:30",
+              work_notes: "Auto-enriched by IncidentMCP v1.0. Please verify before assigning.",
+              additional_comments: "Similar to INC0041209 — suggest checking APIM cache and SAP RFC pool."
+            },
+            enrichment_confidence: 0.91
+          }
+        }]
+      }
+    })
+  },
+  rca: {
+    name: 'generate_rca',
+    type: 'TOOL',
+    desc: 'Draft a Root Cause Analysis document from incident timeline + logs',
+    fields: [
+      { id: 'incident_id', label: 'Incident ID', type: 'text', default: 'INC0045821' },
+      { id: 'resolution_summary', label: 'Resolution Summary', type: 'textarea', default: 'Restarted Azure APIM developer cache. SAP RFC connection pool limit increased from 10 to 25. Service restored at 15:09 IST.' },
+      { id: 'duration_minutes', label: 'Duration (minutes)', type: 'text', default: '37' },
+      { id: 'affected_users', label: 'Affected Users', type: 'text', default: '3' },
+    ],
+    schema: `{
+  "name": "generate_rca",
+  "description": "Draft Root Cause Analysis from incident data",
+  "inputSchema": {
+    "type": "object",
+    "required": ["incident_id","resolution_summary"],
+    "properties": {
+      "incident_id": { "type": "string" },
+      "resolution_summary": {
+        "type": "string",
+        "description": "What was done to resolve the incident"
+      },
+      "duration_minutes": { "type": "integer" },
+      "affected_users": { "type": "integer" }
+    }
+  }
+}`,
+    code: `@mcp.tool()
+async def generate_rca(
+    incident_id: str,
+    resolution_summary: str,
+    duration_minutes: int = 0,
+    affected_users: int = 0
+) -> list[TextContent]:
+    """Generate structured RCA document draft."""
+    
+    # Fetch incident history from PostgreSQL
+    incident = db.get_incident(incident_id)
+    timeline = db.get_event_timeline(incident_id)
+    
+    response = az_client.chat.completions.create(
+        model="gpt-4o",
+        messages=[{"role":"user","content":f"""
+        Generate a professional RCA for:
+        Incident: {incident}
+        Timeline: {timeline}
+        Resolution: {resolution_summary}
+        
+        Return JSON: executive_summary, root_cause,
+        contributing_factors, timeline_of_events,
+        corrective_actions, preventive_measures,
+        business_impact, lessons_learned
+        """}],
+        response_format={"type":"json_object"}
+    )
+    
+    rca = json.loads(response.choices[0].message.content)
+    return [TextContent(type="text", text=json.dumps(rca))]`,
+    mockResponse: (data) => ({
+      jsonrpc: "2.0",
+      id: 4,
+      result: {
+        content: [{
+          type: "text",
+          text: {
+            incident_id: data.incident_id || "INC0045821",
+            rca_draft: {
+              executive_summary: `P1 incident on SAP APIM /orders endpoint lasted ${data.duration_minutes||37} minutes affecting ${data.affected_users||3} users. Root cause: SAP RFC connection pool exhaustion combined with APIM cache staleness.`,
+              root_cause: "SAP RFC connection pool (limit: 10) exhausted by long-running background batch job, causing Azure APIM to receive no healthy backends, triggering 502 responses.",
+              contributing_factors: ["RFC pool limit too low for concurrent peak load", "APIM health probe not detecting RFC exhaustion (was checking HTTP layer only)", "No auto-scaling configured for SAP connection pool"],
+              corrective_actions: [data.resolution_summary || "Restarted APIM cache, increased RFC pool"],
+              preventive_measures: ["Increase RFC pool to 25 (done)", "Add RFC connection count to App Insights alert", "Create runbook for APIM 502 pattern — now in KB0012341", "Enable APIM backend circuit breaker policy"],
+              business_impact: `Order intake blocked for ${data.duration_minutes||37} minutes. Estimated ${Math.round((data.duration_minutes||37)*2)} orders delayed. No data loss.`,
+              lessons_learned: ["L3 RFC metrics were not part of L1 monitoring scope — added", "Similar incident INC0041209 had same root cause — better runbook linking needed"]
+            }
+          }
+        }]
+      }
+    })
+  },
+  res_kb: {
+    name: 'incident://knowledge-base',
+    type: 'RESOURCE',
+    desc: 'Live knowledge base & runbooks exposed as MCP resource context',
+    fields: [
+      { id: 'category', label: 'Filter Category', type: 'select', options: ['All', 'Azure', 'SAP', 'Network', 'Database', 'Security'], default: 'All' },
+    ],
+    schema: `{
+  "uri": "incident://knowledge-base",
+  "name": "IT Knowledge Base",
+  "description": "All KB articles, runbooks, and SOPs",
+  "mimeType": "application/json"
+}`,
+    code: `@mcp.resource("incident://knowledge-base")
+async def get_knowledge_base() -> str:
+    """Expose full KB as MCP resource for LLM context."""
+    articles = db.query("SELECT * FROM kb_articles WHERE active=TRUE")
+    return json.dumps({
+        "total": len(articles),
+        "articles": [a.to_dict() for a in articles]
+    })`,
+    mockResponse: () => ({
+      jsonrpc: "2.0",
+      id: 5,
+      result: {
+        contents: [{
+          uri: "incident://knowledge-base",
+          mimeType: "application/json",
+          text: { total_articles: 247, categories: { Azure: 89, SAP: 54, Network: 62, Database: 42 }, last_updated: "2025-06-14T08:00:00Z", sample_titles: ["Azure APIM 502/504 Troubleshooting", "SAP RFC Connection Pooling Best Practices", "PostgreSQL Deadlock Detection & Resolution", "Kubernetes Pod CrashLoopBackOff Runbook"] }
+        }]
+      }
+    })
+  },
+  res_metrics: {
+    name: 'incident://metrics',
+    type: 'RESOURCE',
+    desc: 'Real-time MTTR, ticket volume, SLA breach statistics as MCP context',
+    fields: [],
+    schema: `{
+  "uri": "incident://metrics",
+  "name": "Live Incident Metrics",
+  "mimeType": "application/json"
+}`,
+    code: `@mcp.resource("incident://metrics")
+async def get_metrics() -> str:
+    """Real-time incident metrics from ServiceNow."""
+    return json.dumps(fetch_snow_metrics())`,
+    mockResponse: () => ({
+      jsonrpc: "2.0",
+      id: 6,
+      result: {
+        contents: [{
+          uri: "incident://metrics",
+          text: { mttr_avg_minutes: 42, mttr_ai_assisted_minutes: 24, reduction_pct: 43, open_p1: 2, open_p2: 7, sla_breach_risk: 3, tickets_today: 18, ai_auto_resolved_pct: 31 }
+        }]
+      }
+    })
+  },
+  res_hist: {
+    name: 'incident://history',
+    type: 'RESOURCE',
+    desc: 'Past incident patterns for similarity matching and learning',
+    fields: [],
+    schema: `{
+  "uri": "incident://history",
+  "mimeType": "application/json"
+}`,
+    code: `@mcp.resource("incident://history")
+async def get_history() -> str:
+    return json.dumps(db.get_recent_incidents(limit=100))`,
+    mockResponse: () => ({
+      jsonrpc: "2.0",
+      id: 7,
+      result: { contents: [{ uri: "incident://history", text: { total_incidents_indexed: 1847, vector_indexed: 1802, patterns_identified: 23, top_recurring: ["APIM 502 — RFC timeout", "DB deadlock on batch run", "Azure VM disk full", "SAP login failure peak-hour"] } }] }
+    })
+  },
+  p_runbook: {
+    name: 'generate_runbook',
+    type: 'PROMPT',
+    desc: 'Structured runbook creation prompt template for any incident type',
+    fields: [
+      { id: 'incident_type', label: 'Incident Type', type: 'text', default: 'Azure APIM 502 errors' },
+      { id: 'audience', label: 'Target Audience', type: 'select', options: ['L1 Support', 'L2 Engineer', 'DevOps', 'Management'], default: 'L2 Engineer' },
+    ],
+    schema: `{
+  "name": "generate_runbook",
+  "description": "Structured runbook prompt template",
+  "arguments": [
+    { "name": "incident_type", "required": true },
+    { "name": "audience", "required": false }
+  ]
+}`,
+    code: `@mcp.prompt()
+async def generate_runbook(
+    incident_type: str,
+    audience: str = "L2 Engineer"
+) -> list[Message]:
+    return [Message(role="user", content=f"""
+    Create a detailed IT runbook for: {incident_type}
+    Audience: {audience}
+    
+    Include: Overview, Prerequisites, Step-by-step resolution,
+    Escalation criteria, Rollback steps, Verification checklist
+    """)]`,
+    mockResponse: (data) => ({
+      jsonrpc: "2.0",
+      id: 8,
+      result: {
+        messages: [{
+          role: "user",
+          content: {
+            type: "text",
+            text: `Create a detailed IT runbook for: ${data.incident_type||"Azure APIM 502 errors"}\nAudience: ${data.audience||"L2 Engineer"}\n\nInclude sections:\n1. Overview & Symptoms\n2. Immediate Triage Steps\n3. Step-by-step Resolution\n4. Escalation Criteria\n5. Rollback Procedure\n6. Post-resolution Verification\n7. Prevention Measures`
+          }
+        }]
+      }
+    })
+  },
+  p_summary: {
+    name: 'incident_summary',
+    type: 'PROMPT',
+    desc: 'Executive-ready incident summary with business impact for stakeholders',
+    fields: [
+      { id: 'incident_id', label: 'Incident ID', type: 'text', default: 'INC0045821' },
+      { id: 'audience', label: 'Audience', type: 'select', options: ['CTO/CIO', 'Project Manager', 'Business Stakeholder', 'Technical Lead'], default: 'Project Manager' },
+    ],
+    schema: `{
+  "name": "incident_summary",
+  "arguments": [
+    { "name": "incident_id", "required": true },
+    { "name": "audience", "required": false }
+  ]
+}`,
+    code: `@mcp.prompt()
+async def incident_summary(
+    incident_id: str,
+    audience: str = "Project Manager"
+) -> list[Message]:
+    incident = db.get_incident(incident_id)
+    return [Message(role="user", content=f"""
+    Create a concise incident summary for {audience}:
+    {incident}
+    
+    Include: What happened, Business impact,
+    Duration, Resolution, Next steps
+    """)]`,
+    mockResponse: (data) => ({
+      jsonrpc: "2.0",
+      id: 9,
+      result: {
+        messages: [{
+          role: "user",
+          content: {
+            type: "text",
+            text: `Write a concise incident summary for ${data.audience||"Project Manager"} about ${data.incident_id||"INC0045821"}.\n\nTone: professional, non-technical where possible.\nFormat: 3 paragraphs — What happened, Business impact, Resolution & next steps.\nLength: 150-200 words.`
+          }
+        }]
+      }
+    })
+  }
+};
+
+// ── Tab switching ──
+function switchTab(tab) {
+  ['request','schema','code'].forEach(t => {
+    document.getElementById('tab-'+t).classList.toggle('hidden', t !== tab);
+  });
+  document.querySelectorAll('.tab-btn').forEach((b,i) => {
+    b.classList.toggle('active', ['request','schema','code'][i] === tab);
+  });
+}
+
+// ── Select Tool ──
+function selectTool(key) {
+  activeTool = key;
+  document.querySelectorAll('.tool-item').forEach(el => el.classList.remove('active'));
+  document.getElementById('t-'+key)?.classList.add('active');
+
+  const tool = TOOLS[key];
+  document.getElementById('active-tool-name').textContent = tool.name;
+  document.getElementById('active-tool-desc').textContent = tool.desc;
+  document.getElementById('schema-display').textContent = tool.schema;
+  document.getElementById('code-display').textContent = tool.code;
+
+  // Build form
+  const fb = document.getElementById('form-body');
+  if (!tool.fields.length) {
+    fb.innerHTML = `<div class="protocol-info" style="margin:0">
+      <span>📡</span><span>This <strong>${tool.type}</strong> is accessed via <strong>resources/read</strong> — no input parameters required.</span>
+    </div>
+    <button class="call-btn" onclick="executeCall()">▶ Fetch Resource</button>`;
+    return;
+  }
+
+  let html = '';
+  const gridFields = [];
+  const fullFields = [];
+  tool.fields.forEach(f => (f.type === 'textarea' ? fullFields : gridFields).push(f));
+
+  if (gridFields.length) {
+    html += `<div class="input-row">`;
+    gridFields.forEach(f => {
+      html += `<div class="form-group"><label class="form-label">${f.label}</label>`;
+      if (f.type === 'select') {
+        html += `<select class="form-select" id="f-${f.id}">`;
+        f.options.forEach(o => html += `<option ${o===f.default?'selected':''}>${o}</option>`);
+        html += `</select>`;
+      } else {
+        html += `<input class="form-input" id="f-${f.id}" type="text" placeholder="${f.placeholder||''}" value="${f.default||''}">`;
+      }
+      html += `</div>`;
+    });
+    html += `</div>`;
+  }
+
+  fullFields.forEach(f => {
+    html += `<div class="form-group"><label class="form-label">${f.label}</label>
+    <textarea class="form-textarea" id="f-${f.id}" placeholder="${f.placeholder||''}">${f.default||''}</textarea></div>`;
+  });
+
+  html += `<button class="call-btn" onclick="executeCall()">▶ Execute MCP Call</button>`;
+  fb.innerHTML = html;
+
+  // Reset response
+  document.getElementById('res-output').innerHTML = `<span class="jm">// Ready to call ${tool.name}...</span>`;
+  document.getElementById('res-status').textContent = 'IDLE';
+  document.getElementById('res-status').className = 'res-status status-wait';
+
+  switchTab('request');
+}
+
+// ── Execute call ──
+async function executeCall() {
+  const tool = TOOLS[activeTool];
+  const btn = document.querySelector('.call-btn');
+  btn.classList.add('loading');
+  btn.innerHTML = '⏳ Calling MCP Server...';
+
+  // Gather form data
+  const data = {};
+  tool.fields.forEach(f => {
+    const el = document.getElementById('f-'+f.id);
+    if (el) data[f.id] = el.value;
+  });
+
+  // Show typing
+  document.getElementById('res-status').textContent = 'PROCESSING';
+  document.getElementById('res-status').className = 'res-status status-wait';
+  document.getElementById('res-output').innerHTML = `<div class="typing"><span></span><span></span><span></span></div><span class="jm">// LLM reasoning in progress...</span>`;
+
+  const start = Date.now();
+
+  await delay(1200 + Math.random() * 800);
+
+  const latency = Date.now() - start;
+  const response = tool.mockResponse(data);
+  const tokens = Math.floor(400 + Math.random() * 600);
+
+  callCount++;
+  totalTokens += tokens;
+
+  document.getElementById('m-calls').textContent = callCount;
+  document.getElementById('m-tokens').textContent = totalTokens.toLocaleString();
+  document.getElementById('m-lat').textContent = latency;
+
+  document.getElementById('res-status').textContent = '200 OK';
+  document.getElementById('res-status').className = 'res-status status-ok';
+  document.getElementById('res-output').innerHTML = syntaxHighlight(JSON.stringify(response, null, 2));
+
+  btn.classList.remove('loading');
+  btn.innerHTML = '▶ Execute MCP Call';
+
+  addActivity(tool, latency, tokens);
+}
+
+function addActivity(tool, latency, tokens) {
+  const feed = document.getElementById('activity-feed');
+  const now = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const colors = { TOOL: 'var(--accent)', RESOURCE: 'var(--accent3)', PROMPT: '#a78bfa' };
+  const item = document.createElement('div');
+  item.className = 'activity-item';
+  item.innerHTML = `
+    <div class="ai-time">${now}</div>
+    <div class="ai-body">
+      <div class="ai-method" style="color:${colors[tool.type]}">${tool.type}</div>
+      <div class="ai-label">${tool.name}</div>
+      <div class="ai-meta">${latency}ms · ${tokens} tokens · 200 OK</div>
+    </div>`;
+  feed.insertBefore(item, feed.firstChild);
+}
+
+function syntaxHighlight(json) {
+  return json
+    .replace(/("(?:[^"\\]|\\.)*")(\s*:)/g, `<span class="jk">$1</span>$2`)
+    .replace(/:\s*("(?:[^"\\]|\\.)*")/g, `: <span class="js">$1</span>`)
+    .replace(/:\s*(\d+\.?\d*)/g, `: <span class="jn">$1</span>`)
+    .replace(/:\s*(true|false|null)/g, `: <span class="jb">$1</span>`);
+}
+
+function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// Init
+selectTool('triage');
+</script>
+</body>
+</html>
